@@ -511,6 +511,21 @@ function pagoAOf(v){
 }
 var EN={Cadena:'Cadena',Micro:'Micro',Italy:'Italy',GF18K:'GF 18 K'};
 var EE={Cadena:'🇨🇱',Micro:'🇨🇱',Italy:'🇮🇹',GF18K:'⚜️'};
+// Arma el mensaje de WhatsApp desde los datos de la venta (form nuevo, editor e historial usan el mismo formato).
+function buildMensaje(o){
+  var por=o.ventaPor||'';var porLabel=por==='Venta en oficina'?'Oficina':por;
+  var pagoALbl=o.pagoA==='empresa'?'Empresa':(o.vendName||'Vendedor');
+  var lineas=o.lineas||[],insumos=o.insumos||[];
+  var esKil=lineas.some(esKileroLinea);
+  var msg=(porLabel==='Oficina'?'Venta Presencial':'Venta Por '+porLabel)+'\nPagó a: '+pagoALbl+'\nNombre: '+(o.cliente||'—')+'\nKilero: '+(esKil?'Si':'No')+'\n\n';
+  lineas.forEach(function(l){msg+=l.gr+' | '+EN[l.cat]+' '+(EE[l.cat]||'')+'\n';});
+  insumos.forEach(function(x){msg+=fmt(x.costo||0)+' | '+(x.desc||'')+' 💎\n';});
+  if(o.venta>0)msg+='\nVenta: '+fmt(o.venta);
+  return msg;
+}
+function mensajeDeVenta(v){
+  return buildMensaje({ventaPor:v.ventaPor,pagoA:pagoAOf(v),vendName:nicerName(v.userName||'Vendedor'),cliente:v.cliente,lineas:v.lineas,insumos:v.insumos,venta:v.totalVenta||0});
+}
 var hPer='todo';
 var hOff=0;
 
@@ -766,15 +781,9 @@ function calcular(){
   var rvl=document.getElementById('rVl');if(rvl)rvl.textContent=fmt(Math.max(0,vend));
   var por=(document.getElementById('vPor')||{}).value||'';
   var cli=((document.getElementById('vCliente')||{}).value||'').trim()||'—';
-  var porLabel=por==='Venta en oficina'?'Oficina':por;
   var pagoA=(document.getElementById('vPagoA')||{}).value||'vendedor';
   var nomVendMsg=nicerName((profile&&profile.name)||(fbUser&&fbUser.email&&fbUser.email.split('@')[0])||'Vendedor');
-  var pagoALbl=pagoA==='empresa'?'Empresa':nomVendMsg;
-  var esKilero=lineas.some(esKileroLinea);
-  var msg=(porLabel==='Oficina'?'Venta Presencial':'Venta Por '+porLabel)+'\nPagó a: '+pagoALbl+'\nNombre: '+cli+'\nKilero: '+(esKilero?'Si':'No')+'\n\n';
-  lineas.forEach(function(l){msg+=l.gr+' | '+EN[l.cat]+' '+(EE[l.cat]||'')+'\n';});
-  ins.forEach(function(x){msg+=fmt(x.costo)+' | '+x.desc+' 💎\n';});
-  if(venta>0)msg+='\nVenta: '+fmt(venta);
+  var msg=buildMensaje({ventaPor:por,pagoA:pagoA,vendName:nomVendMsg,cliente:cli,lineas:lineas,insumos:ins,venta:venta});
   var mb=document.getElementById('mBox');if(mb)mb.textContent=msg;
 }
 
@@ -973,12 +982,14 @@ function guardarEdicion(){
     pctDiego:d.pD,pctVendedor:d.pV,
     editadoAt:Date.now(),editadoPor:nicerName((profile&&profile.name)||fbUser.email)
   };
+  // Regenerar el mensaje de WhatsApp con los datos editados
+  patch.mensaje=mensajeDeVenta(Object.assign({},EDIT_VENTA,patch));
   window.__FB.updateVenta(EDIT_VENTA.id,patch).then(function(){
     bitacora('edit',{ventaId:EDIT_VENTA.id,before:prev,after:{cliente:cli,totalVenta:d.venta,utilidad:d.util,ventaPor:canal}});
     toastOk('✓ Venta actualizada');cerrarEditor();
   }).catch(function(e){toast('Error: '+e.message);});
 }
-function copiarMsgH(id){var v=ventas.find(function(x){return x.id===id;});if(!v)return;navigator.clipboard.writeText(v.mensaje||'').then(function(){toast('¡Copiado!');}).catch(function(){toast('No se pudo copiar');});}
+function copiarMsgH(id){var v=ventas.find(function(x){return x.id===id;});if(!v)return;navigator.clipboard.writeText(mensajeDeVenta(v)).then(function(){toast('¡Copiado!');}).catch(function(){toast('No se pudo copiar');});}
 
 function showTab(t){
   tab=t;
