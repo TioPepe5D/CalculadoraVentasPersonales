@@ -430,7 +430,7 @@ var hPagoFilt='todos';
 var repUser='';
 var repOff=0;
 var gPer='mes',gUser='',gOff=0,gSel=null;
-var DIST={Amanda:{v:0.70,d:0.30},Cris:{v:0.50,d:0.50},Martin:{v:0.75,d:0.25},Benjamin:{v:0.75,d:0.25},Jordan:{v:0.80,d:0.20},Diego:{v:1.00,d:0.00}};
+var DIST={Amanda:{v:0.70,d:0.30},Cris:{v:0.50,d:0.50},Martin:{v:0.75,d:0.25},Benjamin:{v:0.75,d:0.25},Jordan:{v:0.80,d:0.20},Valentina:{v:0.60,d:0.40},Vale:{v:0.60,d:0.40},Diego:{v:1.00,d:0.00}};
 var mesesCerrados=[];
 var unsubCierres=null;
 function userRole(){
@@ -500,7 +500,7 @@ function comFor(v){
   }
   return {vendedor:u*pV,diego:u*pD,pV:pV,pD:pD};
 }
-var KILERO_PGR={Cadena:{400:1,405:1},Micro:{550:1,570:1},GF18K:{1200:1,1500:1}};
+var KILERO_PGR={Cadena:{400:1,405:1,410:1},Micro:{550:1,560:1,570:1},GF18K:{1200:1,1500:1}};
 function esKileroLinea(l){return !!(l&&KILERO_PGR[l.cat]&&KILERO_PGR[l.cat][l.pgr]);}
 function ventaTieneKilero(v){return (v&&v.lineas||[]).some(esKileroLinea);}
 // Diego: todas sus ventas se consideran pagadas a Empresa, sin importar lo que diga el campo guardado.
@@ -637,7 +637,7 @@ function htmlVenta(){
     '<div class="campo"><label>Nombre Cliente</label><input type="text" id="vCliente" placeholder="Nombre del cliente"></div>'+
     '<div class="campo"><label>Total de Venta ($)</label><input type="text" inputmode="numeric" id="vTotal" placeholder="Ej: $45.890" oninput="fmtMonedaInput(this)"></div></div>'+
     '<div class="sec"><div class="sec-t">Detalles de Los Gramos</div>'+
-      hCat('Cadena','🇨🇱','Cadena',450,405)+hCat('Micro','🇨🇱','Micro',650,550)+
+      hCat('Cadena','🇨🇱','Cadena',450,410)+hCat('Micro','🇨🇱','Micro',650,560)+
       '<div class="cat"><div class="cat-h"><div class="cat-n">🇮🇹 Italy</div><div class="cat-p" id="p-Italy">$3.000/gr</div></div>'+
         '<div class="cat-i"><div><div class="cat-l">Gramos</div><input type="text" inputmode="decimal" class="cat-gr" data-cat="Italy" placeholder="0" oninput="this.value=this.value.replace(\',\',\'.\');calcular()"></div>'+
         '<div><div class="cat-l">$ por gramo</div><div class="precio-fijo">$3.000</div><input type="hidden" class="cat-pgr" data-cat="Italy" value="3000"></div></div></div>'+
@@ -694,7 +694,10 @@ function setP(cat,val,btn){
 
 var KILERO_UNLOCKED=false;
 var PRECIO_NORMAL={Cadena:450,Micro:650,Italy:3000,GF18K:1600};
-var PRECIO_KILERO={Cadena:405,Micro:550,Italy:3000,GF18K:1500};
+var PRECIO_KILERO={Cadena:410,Micro:560,Italy:3000,GF18K:1500};
+// Precios kilero vigentes hasta el 27-nov-2026 (para correcciones de ventas anteriores a esa fecha)
+var PRECIO_KILERO_ANT={Cadena:405,Micro:550,Italy:3000,GF18K:1500};
+var KILERO_V2_FROM=new Date(2026,10,27,0,0,0).getTime();
 function kileroCondicion(){
   var totalGr=0;document.querySelectorAll('.cat-gr').forEach(function(i){totalGr+=parseFloat(i.value)||0;});
   var totalVenta=parseMoneda((document.getElementById('vTotal')||{}).value);
@@ -805,7 +808,7 @@ function _resetForm(){
   document.querySelectorAll('input[type="number"],input[type="text"]').forEach(function(el){el.value='';});
   KILERO_UNLOCKED=false;
   var dKil=isDiegoUser();
-  var def=dKil?{Cadena:405,Micro:550,Italy:3000,GF18K:1500}:{Cadena:450,Micro:650,Italy:3000,GF18K:1600};
+  var def=dKil?PRECIO_KILERO:PRECIO_NORMAL;
   Object.keys(def).forEach(function(cat){
     var pgr=document.querySelector('.cat-pgr[data-cat="'+cat+'"]');if(pgr)pgr.value=def[cat];
     var btns=document.querySelectorAll('.precio-btn[data-cat="'+cat+'"]');
@@ -1721,12 +1724,6 @@ function renderG(){
     '</div>';
 }
 
-var PRICE_MIGRATION_MAP={
-  Cadena:{400:405},
-  Micro:{550:570},
-  GF18K:{1200:1500,1400:1600}
-};
-var MIGRATION_FROM=new Date(2026,4,1,0,0,0).getTime();
 var KILERO_AUTO_FROM=new Date(2026,5,1,0,0,0).getTime();
 
 function isDiegoVenta(v){return String(v.userName||'').trim().toLowerCase()==='diego';}
@@ -1736,7 +1733,9 @@ function ventaCumpleKilero(v){
 }
 function aplicarKileroVenta(v){
   var nuevas=(v.lineas||[]).map(function(l){
-    var k=PRECIO_KILERO[l.cat];
+    if(esKileroLinea(l))return {cat:l.cat,gr:l.gr,pgr:l.pgr}; // ya está a precio kilero
+    var tabla=(v.at||0)>=KILERO_V2_FROM?PRECIO_KILERO:PRECIO_KILERO_ANT;
+    var k=tabla[l.cat];
     if(k!==undefined&&l.pgr!==k)return {cat:l.cat,gr:l.gr,pgr:k};
     return {cat:l.cat,gr:l.gr,pgr:l.pgr};
   });
@@ -1891,47 +1890,6 @@ function recalcularComisiones(){
   });
 }
 
-function migrarCostosMayo(){
-  if(!window.__FB.isAdmin(fbUser.email)){toast('Solo admin');return;}
-  var pendientes=ventas.filter(function(v){return(v.at||0)>=MIGRATION_FROM;});
-  if(!pendientes.length){toast('Sin ventas para migrar');return;}
-  var afectadas=pendientes.filter(function(v){
-    return(v.lineas||[]).some(function(l){var m=PRICE_MIGRATION_MAP[l.cat];return m&&m[l.pgr]!==undefined;});
-  });
-  if(!afectadas.length){toast('Ya están al día');return;}
-  var msg='Se actualizarán '+afectadas.length+' venta(s) desde el 1-may.\n\n'+
-    'Cadena: 400→405 (kilero)\n'+
-    'Micro: 550→570 (kilero)\n'+
-    'Oro (GF 18K): 1200→1500 (kilero), 1400→1600 (normal)\n\n¿Continuar?';
-  if(!confirm(msg))return;
-  var btn=document.getElementById('btnMigrar');if(btn){btn.disabled=true;btn.textContent='Migrando…';}
-  var ok=0,err=0;
-  var tasks=afectadas.map(function(v){
-    var nuevasLineas=(v.lineas||[]).map(function(l){
-      var m=PRICE_MIGRATION_MAP[l.cat],np=(m&&m[l.pgr]!==undefined)?m[l.pgr]:l.pgr;
-      return {cat:l.cat,gr:l.gr,pgr:np};
-    });
-    var costoOro=nuevasLineas.reduce(function(s,l){return s+(l.gr*l.pgr);},0);
-    var costoIns=(v.insumos||[]).reduce(function(s,i){return s+(i.costo||0);},0);
-    var totalC=costoOro+costoIns+1000;
-    var util=(v.totalVenta||0)-totalC;
-    var pD=v.pctDiego!==undefined?v.pctDiego:0;
-    var pV=v.pctVendedor!==undefined?v.pctVendedor:1;
-    if(v.pctDiego===undefined&&v.userName){var d=matchDist(v.userName);pD=d.pct.d;pV=d.pct.v;}
-    return window.__FB.updateVenta(v.id,{
-      lineas:nuevasLineas,utilidad:util,
-      diego:util*pD,vendedor:util*pV,
-      pctDiego:pD,pctVendedor:pV,
-      migradoAt:Date.now()
-    }).then(function(){ok++;},function(){err++;});
-  });
-  Promise.all(tasks).then(function(){
-    if(btn){btn.disabled=false;btn.textContent='🔧 Migrar costos (desde 1-may)';}
-    bitacora('price_migration',{detalle:ok+' ventas migradas (desde 1-may)'});
-    toastOk('✓ '+ok+' venta(s) migradas'+(err?' · '+err+' con error':''));
-  });
-}
-
 function openAdmin(){
   var ov=document.createElement('div');ov.className='admin-overlay';ov.id='aOv';
   var tabs='';
@@ -1994,8 +1952,6 @@ function loadAdmin(t){
         '<div style="font-size:10px;letter-spacing:.2em;color:var(--ac);text-transform:uppercase;margin-bottom:10px">🔧 Mantenimiento</div>'+
         '<button class="btn-s" id="btnKilJun" onclick="autoKileroJunio()">🏷 Auto-aplicar Kilero (desde 1-jun)</button>'+
         '<p class="nota" style="margin-top:6px">Revisa las ventas desde 1-jun: si cumplen ≥500 g o ≥$250.000 y se cargaron a precio normal, las actualiza a precio kilero.</p>'+
-        '<button class="btn-s" id="btnMigrar" onclick="migrarCostosMayo()" style="margin-top:10px">🔧 Migrar costos (desde 1-may)</button>'+
-        '<p class="nota" style="margin-top:6px">Aplica los nuevos precios kilero a Cadena/Micro y recalcula GF 18 K.</p>'+
         '<button class="btn-s" id="btnRecCom" onclick="recalcularComisiones()" style="margin-top:10px">⚙️ Recalcular utilidad y comisiones</button>'+
         '<p class="nota" style="margin-top:6px">Recalcula utilidad y reparte vendedor/empresa según %.</p>'+
       '</div>';
